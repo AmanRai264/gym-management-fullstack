@@ -1,30 +1,34 @@
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
-const connectDB = require("./config/db");
-const User = require("./models/User");
-const { seed } = require("./seed/seed");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
-
-(async () => {
-  try {
-    await connectDB();
-    if ((await User.countDocuments()) === 0) {
-      console.log("[DB] No demo data found. Seeding the database...");
-      await seed();
-    }
-  } catch (error) {
-    console.error("[DB] Initialization failed:", error.message);
-  }
-})();
 
 const app = express();
 
+// Vercel terminates TLS in front of the function, so the real client IP only
+// exists in the X-Forwarded-For header. Trusting the proxy keeps the rate
+// limiter from rejecting every request.
+app.set("trust proxy", 1);
+
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }));
+
+// CLIENT_URL accepts a comma-separated list so the Vercel domain (and the
+// local Vite dev server) can both be allowed. When unset, the request origin
+// is reflected, which keeps same-origin deployments working out of the box.
+const allowedOrigins = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: allowedOrigins.length ? allowedOrigins : true,
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: "5mb" }));
 app.use(morgan(process.env.NODE_ENV === "development" ? "dev" : "combined"));
 
@@ -55,5 +59,4 @@ app.use("/api/reports", require("./routes/reportRoutes"));
 app.use(notFound);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`[Server] Running on http://localhost:${PORT}`));
+module.exports = app;

@@ -17,6 +17,9 @@ build/
 .next/
 .vite/
 
+# Vercel
+.vercel
+
 # Logs
 *.log
 npm-debug.log*
